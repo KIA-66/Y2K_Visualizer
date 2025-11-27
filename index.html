@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Y2K VISUALIZER // V11.0 ULTIMATE</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        /* --- GLOBAL RESET & FIX --- */
+        * { box-sizing: border-box; -webkit-font-smoothing: antialiased; user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Share Tech Mono', monospace; color: #00f3ff; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+        /* --- HUD LAYER --- */
+        #ui-layer { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            z-index: 10; pointer-events: none; 
+            display: flex; flex-direction: column; justify-content: space-between; 
+            padding: 20px; 
+        }
+
+        /* Glassmorphism Panel */
+        .panel { 
+            background: rgba(10, 20, 30, 0.65); 
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 243, 255, 0.3); border-radius: 4px;
+            padding: 15px; pointer-events: auto; 
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+            min-width: 280px; max-width: 340px; margin-bottom: 10px; transition: all 0.3s ease;
+        }
+        .panel:hover { border-color: rgba(0, 243, 255, 0.8); box-shadow: 0 0 30px rgba(0, 243, 255, 0.2); }
+
+        h1 { margin: 0 0 10px 0; font-size: 1.4rem; letter-spacing: 2px; border-bottom: 1px solid rgba(0, 243, 255, 0.3); padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center; color: #fff; }
+        h1::after { content: '● LIVE'; font-size: 0.7rem; color: #ff0055; animation: pulse 1.5s infinite; }
+
+        /* Webcam Frame */
+        #webcam-wrapper { position: relative; width: 100%; height: 100px; border: 1px solid rgba(0, 243, 255, 0.2); margin-top: 10px; overflow: hidden; background: #000; border-radius: 2px; }
+        #webcam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0.6; }
+        #gesture-status { position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0, 15, 20, 0.9); color: #00f3ff; font-size: 0.7rem; text-align: center; padding: 3px 0; border-top: 1px solid rgba(0, 243, 255, 0.3); letter-spacing: 1px; }
+
+        /* Controls */
+        .control-group { margin-top: 10px; }
+        label { display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.8rem; color: rgba(255, 255, 255, 0.7); letter-spacing: 1px; }
+        
+        input[type="range"] { -webkit-appearance: none; width: 100%; background: transparent; margin: 6px 0; }
+        input[type="range"]:focus { outline: none; }
+        input[type="range"]::-webkit-slider-runnable-track { width: 100%; height: 3px; background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 12px; width: 12px; background: #00f3ff; border: 1px solid #000; border-radius: 50%; margin-top: -4px; box-shadow: 0 0 8px #00f3ff; }
+
+        /* Audio Button */
+        .cyber-btn {
+            display: flex; justify-content: center; align-items: center; width: 100%; padding: 12px 0; margin-top: 10px;
+            background: rgba(255, 0, 85, 0.1); border: 1px solid #ff0055; color: #ff0055;
+            font-family: 'Share Tech Mono', monospace; font-size: 0.9rem; cursor: pointer;
+            text-transform: uppercase; letter-spacing: 2px; transition: 0.3s;
+            text-decoration: none;
+        }
+        .cyber-btn.active { background: rgba(0, 243, 255, 0.15); border-color: #00f3ff; color: #00f3ff; text-shadow: 0 0 8px #00f3ff; }
+        .cyber-btn:hover { box-shadow: 0 0 15px rgba(255, 0, 85, 0.4); }
+        .cyber-btn.active:hover { box-shadow: 0 0 15px rgba(0, 243, 255, 0.4); }
+        
+        .val-display { color: #fff; text-shadow: 0 0 5px rgba(255,255,255,0.5); }
+        #mode-display { font-size: 1.5rem; color: #d000ff; text-align: right; text-shadow: 0 0 10px rgba(208, 0, 255, 0.6); margin-bottom: 5px;}
+
+        /* Spectrum */
+        .spectrum { display: flex; gap: 3px; height: 25px; margin-top: 8px; align-items: flex-end; justify-content: flex-end; }
+        .spec-bar { width: 33%; background: #333; height: 2px; transition: height 0.05s ease-out; }
+        #vis-low { background: linear-gradient(to top, #5500ff, #ff00ff); }
+        #vis-mid { background: linear-gradient(to top, #0055ff, #00f3ff); }
+        #vis-high { background: linear-gradient(to top, #ffaa00, #ffffaa); }
+
+        .top-row { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; }
+        .section-title { font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom:2px;}
+        
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+
+        /* Mobile Adjustments */
+        @media (max-width: 600px) {
+            .panel { min-width: 100%; margin-bottom: 5px; padding: 10px; }
+            h1 { font-size: 1.2rem; }
+            #webcam-wrapper { height: 80px; }
+            .top-row { flex-direction: column; }
+        }
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <div class="top-row">
+            <div class="panel">
+                <h1>BORAN CORE</h1>
+                <div style="font-size: 0.7rem; color: rgba(0,243,255,0.7); display:flex; justify-content:space-between;">
+                    <span>SYS: ONLINE</span>
+                    <span>ENTITIES: 36K</span>
+                </div>
+                
+                <div id="webcam-wrapper">
+                    <video id="webcam" autoplay playsinline muted></video>
+                    <div id="gesture-status">VISION SYSTEM INITIALIZING...</div>
+                </div>
+            </div>
+
+            <div class="panel" style="text-align: right; flex-grow: 1; max-width: 100%;">
+                <div class="section-title">GEOMETRY ENGINE</div>
+                <div id="mode-display">WORMHOLE</div>
+                <div style="font-size: 0.7rem; color:rgba(255,255,255,0.5);">TAP/SPACE TO MORPH</div>
+                
+                <div style="margin-top: 15px;">
+                    <div class="section-title" style="text-align: right;">SPECTRAL ANALYZER</div>
+                    <div class="spectrum">
+                        <div id="vis-low" class="spec-bar"></div>
+                        <div id="vis-mid" class="spec-bar"></div>
+                        <div id="vis-high" class="spec-bar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" style="margin-top: auto;">
+            <div class="section-title">// AUDIO_INPUT_MATRIX</div>
+            
+            <button id="start-audio-btn" class="cyber-btn">
+                [ ACTIVATE_SYSTEM_EAR ]
+            </button>
+            <div style="font-size:0.65rem; color:#666; text-align:center; margin-top:5px;">LISTENING TO ENVIRONMENT / SPEAKERS</div>
+
+            <div class="control-group">
+                <label>SENSITIVITY <span id="v-sens" class="val-display">3.0</span></label>
+                <input type="range" id="sensRange" min="1.0" max="10.0" step="0.5" value="3.0">
+
+                <label>PARTICLE SIZE <span id="v-size" class="val-display">2.0</span></label>
+                <input type="range" id="sizeRange" min="1.0" max="5.0" step="0.1" value="2.0">
+                
+                <label>BLOOM <span id="v-glow" class="val-display">1.8</span></label>
+                <input type="range" id="glowRange" min="0.5" max="3.5" step="0.1" value="1.8">
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+
+        // --- 1. CONFIG & SCENE ---
+        const COUNT = 36000; 
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.001);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 10000);
+        camera.position.set(0, 100, 900);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance", alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const composer = new EffectComposer(renderer);
+        composer.addPass(new RenderPass(scene, camera));
+        
+        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+        bloomPass.threshold = 0; bloomPass.strength = 1.8; bloomPass.radius = 0.6;
+        composer.addPass(bloomPass);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 0.5;
+
+        // --- 2. PARTICLES & GEOMETRY ---
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(COUNT * 3);
+        const targetPositions = new Float32Array(COUNT * 3);
+        const colors = new Float32Array(COUNT * 3); 
+        const sizes = new Float32Array(COUNT);
+
+        const shapes = { 
+            wormhole: [], data_helix: [], cyber_grid: [], stargate: [], nebula_knot: [],
+            mobius_strip: [], lorenz_attractor: [], hyper_torus: [], fibonacci_sphere: []
+        };
+
+        // SHAPE GENERATION LOGIC (COMPRESSED FOR EFFICIENCY)
+        for(let i=0; i<COUNT; i++) {
+            // Wormhole
+            let t=i/COUNT, a=t*Math.PI*40, r=200+Math.pow(Math.abs(t-0.5)*2,2)*1000;
+            shapes.wormhole.push(Math.cos(a)*r+(Math.random()-0.5)*50, Math.sin(a)*r+(Math.random()-0.5)*50, (t-0.5)*3000);
+            // Helix
+            let a2=t*Math.PI*30, r2=500, off=(i%2===0)?0:Math.PI, br=Math.random()>0.95?300:20;
+            shapes.data_helix.push(Math.cos(a2+off)*r2+(Math.random()-0.5)*br, (t-0.5)*2500, Math.sin(a2+off)*r2+(Math.random()-0.5)*br);
+            // Grid
+            let gs=Math.sqrt(COUNT), sp=60, ix=i%gs, iz=Math.floor(i/gs), x=(ix-gs/2)*sp, z=(iz-gs/2)*sp;
+            shapes.cyber_grid.push(x, Math.sin(x*0.005)*Math.cos(z*0.005)*400+(Math.random()-0.5)*50, z);
+            // Stargate
+            let u=i/COUNT*Math.PI*2, q=7, rs=700+180*Math.cos(q*u);
+            shapes.stargate.push(rs*Math.cos(3*u), rs*Math.sin(3*u), 180*Math.sin(q*u)*2.5+(Math.random()-0.5)*100);
+            // Nebula
+            let tn=(i/COUNT)*Math.PI*120, sc=600;
+            shapes.nebula_knot.push(sc*(Math.cos(tn)+Math.cos(3*tn))*0.5+(Math.random()-0.5)*200, sc*(Math.sin(tn)+Math.sin(3*tn))*0.5+(Math.random()-0.5)*200, sc*Math.sin(4*tn)*0.5+(Math.random()-0.5)*300);
+            // Mobius
+            let um=(i/COUNT)*Math.PI*2, wm=(Math.random()-0.5)*300, Rm=600;
+            shapes.mobius_strip.push((Rm+wm*Math.cos(um/2))*Math.cos(um), (Rm+wm*Math.cos(um/2))*Math.sin(um), wm*Math.sin(um/2));
+            // Sphere
+            let phi=Math.PI*(3-Math.sqrt(5)), y=1-(i/(COUNT-1))*2, rad=Math.sqrt(1-y*y), th=phi*i, Rs=700;
+            shapes.fibonacci_sphere.push(Math.cos(th)*rad*Rs, y*Rs, Math.sin(th)*rad*Rs);
+        }
+        // Lorenz
+        let lx=0.1, ly=0, lz=0, dt=0.005;
+        for(let i=0; i<COUNT; i++) {
+            let dx=10*(ly-lx)*dt, dy=(lx*(28-lz)-ly)*dt, dz=(lx*ly-2.66*lz)*dt;
+            lx+=dx; ly+=dy; lz+=dz; shapes.lorenz_attractor.push(lx*25, ly*25, (lz-25)*25);
+        }
+        // Hyper Torus
+        for(let i=0; i<COUNT; i++) {
+            let u=(i/COUNT)*Math.PI*4, v=(i/COUNT)*Math.PI*20, rd=200+100*Math.cos(v);
+            shapes.hyper_torus.push((600+rd*Math.cos(u))*Math.cos(v*0.1), (600+rd*Math.cos(u))*Math.sin(v*0.1), rd*Math.sin(u)+Math.sin(v)*100);
+        }
+
+        // Init
+        for(let i=0; i<COUNT*3; i++) {
+            positions[i] = shapes.wormhole[i]; targetPositions[i] = shapes.wormhole[i];
+            colors[i] = Math.random(); 
+        }
+        for(let i=0; i<COUNT; i++) sizes[i] = Math.random();
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('colorAttr', new THREE.BufferAttribute(colors, 1)); 
+        geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+        // --- SHADER ---
+        const uniforms = {
+            uTime: { value: 0 }, uBass: { value: 0 }, uMid: { value: 0 }, uHigh: { value: 0 },
+            uHandScale: { value: 1.0 }, uBaseSize: { value: 2.0 }, uSens: { value: 3.0 }
+        };
+
+        const material = new THREE.ShaderMaterial({
+            uniforms: uniforms,
+            vertexShader: `
+                uniform float uTime; uniform float uBass; uniform float uMid; uniform float uHigh;
+                uniform float uHandScale; uniform float uBaseSize; uniform float uSens;
+                attribute float size; attribute float colorAttr; 
+                varying float vType; varying float vIntensity;
+                void main() {
+                    vType = colorAttr; vec3 pos = position;
+                    float isBass = 1.0 - step(0.33, colorAttr); float isHigh = step(0.66, colorAttr); float isMid = 1.0 - isBass - isHigh;
+                    vec3 dir = normalize(pos);
+                    
+                    vec3 moveBass = dir * uBass * 50.0 * uSens;
+                    float swirl = uMid * uSens * 0.3; float s = sin(swirl); float c = cos(swirl);
+                    float nx = pos.x * c - pos.z * s; float nz = pos.x * s + pos.z * c;
+                    vec3 moveMid = (vec3(nx, pos.y, nz) - pos) * isMid;
+                    float noise = sin(uTime * 10.0 + pos.x); vec3 moveHigh = dir * noise * uHigh * 5.0 * uSens;
+                    
+                    pos *= uHandScale;
+                    pos += (moveBass * isBass) + moveMid + (moveHigh * isHigh);
+                    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0); gl_Position = projectionMatrix * mvPosition;
+                    
+                    float beatSize = 1.0 + (isBass * uBass * uSens) + (isHigh * uHigh * uSens);
+                    gl_PointSize = (uBaseSize * size * beatSize * uHandScale * 3.0) * (300.0 / -mvPosition.z);
+                    vIntensity = (isBass * uBass) + (isMid * uMid) + (isHigh * uHigh);
+                }
+            `,
+            fragmentShader: `
+                varying float vType; varying float vIntensity;
+                void main() {
+                    if (dot(gl_PointCoord - 0.5, gl_PointCoord - 0.5) > 0.25) discard;
+                    vec3 cB = vec3(1.0, 0.0, 0.5); vec3 cM = vec3(0.0, 1.0, 0.8); vec3 cH = vec3(1.0, 1.0, 0.5);
+                    float iB = 1.0 - step(0.33, vType); float iH = step(0.66, vType); float iM = 1.0 - iB - iH;
+                    vec3 fin = (cB * iB) + (cM * iM) + (cH * iH);
+                    fin += vec3(vIntensity * 0.8);
+                    gl_FragColor = vec4(fin, 0.85);
+                }
+            `,
+            transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+        });
+
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
+
+        // --- UI EVENTS ---
+        const sensRange = document.getElementById('sensRange'); sensRange.addEventListener('input', (e) => { uniforms.uSens.value = parseFloat(e.target.value); document.getElementById('v-sens').innerText = e.target.value; });
+        const rSize = document.getElementById('sizeRange'); rSize.addEventListener('input', (e) => { uniforms.uBaseSize.value = parseFloat(e.target.value); document.getElementById('v-size').innerText = e.target.value; });
+        const rGlow = document.getElementById('glowRange'); rGlow.addEventListener('input', (e) => { bloomPass.strength = parseFloat(e.target.value); document.getElementById('v-glow').innerText = e.target.value; });
+
+        // --- VISION SYSTEM (MediaPipe) ---
+        const video = document.getElementById('webcam'); const gstStatus = document.getElementById('gesture-status'); let handLandmarker; let lastVidTime = -1; let targetScale = 1.0; let curScale = 1.0;
+        async function initVision() { 
+            try {
+                const resolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"); 
+                handLandmarker = await HandLandmarker.createFromOptions(resolver, { baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`, delegate: "GPU" }, runningMode: "VIDEO", numHands: 1 }); 
+                gstStatus.innerText = ">> OPTICAL SENSORS READY <<"; 
+                if(navigator.mediaDevices?.getUserMedia) { 
+                    navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, facingMode: "user" } }).then(stream => { video.srcObject = stream; video.addEventListener("loadeddata", predictLoop); }).catch(e => { gstStatus.innerText = "CAMERA BLOCKED"; });
+                }
+            } catch(e) { gstStatus.innerText = "VISION ERROR (Check Connection)"; }
+        }
+        initVision();
+
+        async function predictLoop() { 
+            if(video.currentTime !== lastVidTime && handLandmarker) { 
+                lastVidTime = video.currentTime; 
+                let result = handLandmarker.detectForVideo(video, performance.now()); 
+                if(result.landmarks.length > 0) { 
+                    const tips = result.landmarks[0]; 
+                    // Simple logic: Close hand = collapse, Open hand = expand
+                    let d = Math.sqrt(Math.pow(tips[4].x-tips[8].x,2) + Math.pow(tips[4].y-tips[8].y,2)); // Thumb to Index
+                    if(d < 0.05) { targetScale = 0.2; gstStatus.innerText = "⚠ GRAVITY COLLAPSE ⚠"; gstStatus.style.color="#ff0055"; }
+                    else if (d > 0.15) { targetScale = 1.5; gstStatus.innerText = ">> QUANTUM EXPANSION <<"; gstStatus.style.color="#00f3ff"; }
+                    else { targetScale = 1.0; gstStatus.innerText = "HAND DETECTED"; gstStatus.style.color="#fff"; }
+                } else { targetScale = 1.0; gstStatus.innerText = "SCANNING SECTOR..."; gstStatus.style.color="#555"; } 
+            } 
+            requestAnimationFrame(predictLoop); 
+        }
+
+        // --- NEW AUDIO SYSTEM (MICROPHONE) ---
+        let analyser, dataArray, audioCtx;
+        let sBass=0, sMid=0, sHigh=0;
+        const btn = document.getElementById('start-audio-btn');
+        
+        btn.addEventListener('click', async () => {
+            if(audioCtx) return;
+            
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                
+                const source = audioCtx.createMediaStreamSource(stream);
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 1024;
+                analyser.smoothingTimeConstant = 0.85;
+                
+                // CRITICAL: CONNECT MIC TO ANALYSER, BUT NOT TO DESTINATION (SPEAKERS)
+                // PREVENTS FEEDBACK LOOP
+                source.connect(analyser); 
+                
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                btn.classList.add('active');
+                btn.innerHTML = "[ AUDIO UPLINK ESTABLISHED ]";
+            } catch (err) {
+                console.error(err);
+                btn.innerHTML = "ACCESS DENIED (CHECK PERMS)";
+                btn.style.borderColor = "red";
+            }
+        });
+
+        // Shape morph
+        const keys = Object.keys(shapes); let curShape = 0;
+        const changeShape = () => {
+            curShape = (curShape + 1) % keys.length; 
+            document.getElementById('mode-display').innerText = keys[curShape].toUpperCase(); 
+            const arr = shapes[keys[curShape]]; 
+            for(let i=0; i<COUNT*3; i++) targetPositions[i] = arr[i];
+        };
+        window.addEventListener('keydown', (e) => { if(e.code === 'Space') changeShape(); });
+        window.addEventListener('touchstart', (e) => { if(e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') changeShape(); });
+
+        const barLow = document.getElementById('vis-low'); const barMid = document.getElementById('vis-mid'); const barHigh = document.getElementById('vis-high');
+        
+        function animate(time) { 
+            requestAnimationFrame(animate); 
+            
+            // Audio Process
+            let rBass=0, rMid=0, rHigh=0;
+            if(analyser) { 
+                analyser.getByteFrequencyData(dataArray); 
+                const len = dataArray.length; 
+                let bE=Math.floor(len*0.05), mE=Math.floor(len*0.25);
+                for(let i=0;i<bE;i++) rBass+=dataArray[i]; rBass=rBass/bE/255; 
+                for(let i=bE;i<mE;i++) rMid+=dataArray[i]; rMid=rMid/(mE-bE)/255; 
+                for(let i=mE;i<len;i++) rHigh+=dataArray[i]; rHigh=rHigh/(len-mE)/255; 
+            }
+            if(rBass>sBass) sBass+=(rBass-sBass)*0.8; else sBass+=(rBass-sBass)*0.1;
+            sMid+=(rMid-sMid)*0.2; sHigh+=(rHigh-sHigh)*0.2;
+            
+            curScale+=(targetScale-curScale)*0.05;
+            uniforms.uTime.value = time*0.001; 
+            uniforms.uBass.value = sBass; uniforms.uMid.value = sMid; uniforms.uHigh.value = sHigh; 
+            uniforms.uHandScale.value = curScale;
+
+            barLow.style.height=(sBass*100)+"%"; barMid.style.height=(sMid*100)+"%"; barHigh.style.height=(sHigh*100)+"%";
+            
+            const pos = geometry.attributes.position.array; 
+            for(let i=0;i<COUNT*3;i++) pos[i]+=(targetPositions[i]-pos[i])*0.04; 
+            geometry.attributes.position.needsUpdate=true;
+            
+            controls.update(); composer.render(); 
+        }
+        window.addEventListener('resize', () => { camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); composer.setSize(window.innerWidth, window.innerHeight); });
+        animate(0);
+    </script>
+</body>
+</html>
